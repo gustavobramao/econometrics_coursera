@@ -1,0 +1,185 @@
+---
+title: "Econometrics Test 4"
+output:
+html_document:
+toc: true
+toc_float: true
+---
+  
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(highcharter)
+library(dplyr)
+library(viridisLite)
+library(forecast)
+library(treemap)
+library(flexdashboard)
+library(forecast)
+library(readxl)
+library(lmtest)
+library(gap)
+library(MASS)
+library(ggplot2)
+library(corrplot)
+library(plm)
+library(AER)
+
+```
+
+```{r cars, include=FALSE}
+df1 <- read_xlsx("~/desktop/log.xlsx")
+df1$exper2 <- df1$exper^2
+df1$age2 <- df1$age^2
+df1$age <- as.numeric(df1$age)
+
+```
+
+
+(a) Use OLS to estimate the parameters of the model{.tabset df1a-width=400}
+-----------------------------------------------------------------------
+  
+```{r All, echo=TRUE}
+
+#logw = β1 + β2educ + β3exper + β4exper2 + β5smsa + β6south + ε
+
+attach(df1)
+
+fit_0 <- lm(logw ~ educ + exper + exper2 + age + smsa + south + nearc
+            +daded + momed, data=df1)
+
+
+summary(fit_0, diagnostics=TRUE)
+
+par(mfrow = c(2, 2))
+plot(fit_0)
+
+
+
+# Regressor education is significant in this model, every one year increase in education yields 0.07 coeficient on the wage.
+
+```
+
+(b) OLS may be inconsistent in this case as educ and exper may be endogenous.{.tabset df1a-width=400}
+-----------------------------------------------------------------------
+
+```{r OLS, echo=TRUE}
+
+# Give a reason why this may be the case. Also indicate whether the estimate in part (a) is still useful.
+
+plot(educ, exper)
+
+# As seen the more educations the less experience. Education seems exogenous to experience, hence endogenous to wage.
+# Also wage might be compounded by other factors in the error term that are not regressed in the model such as capability or IQ...
+
+
+# Litte multicollinearity in the model however likely biased by the endogenous condition in education and experience.
+newdf1acor = cor(df1[2:11])
+corrplot(newdf1acor, method = "number")
+
+```
+
+(c) Instrument Variables Age .{.tabset df1a-width=400}
+-----------------------------------------------------------------------
+
+
+```{r IV, echo=TRUE}
+
+#Give a motivation why age and age2 can be used as instruments for exper and exper2
+
+plot(age, exper)
+
+
+cor(age,exper)
+
+# Age might be a good control and instrument variable, given that age has a high correlation with experience 0.76 - On the other hand, age^2 could be an indication to capture the nonlinear relation between age and wage.
+
+# Someone with higher experience should have lower education at younger age, so despite solving partially endogeneity, there is still an endogenous condition with this IV.
+```
+
+(d) Run the first-stage regression for educ .{.tabset df1a-width=400}
+-----------------------------------------------------------------------
+
+```{r first stage Reg, echo=TRUE}
+
+
+#Run the first-stage regression for educ for the two-stage least squares estimation of the parameters in the model above when age, age2, nearc, dadeduc, and momeduc are used as additional instruments. What do you conclude about the suitability of these instruments for schooling?
+
+
+fit_1 <- lm(educ ~ age + age2 + smsa + south + nearc
+            +daded + momed, data=df1)
+
+summary(fit_1, diagnostics=TRUE)
+
+#Age and Age^2 regeress on Educ.
+
+
+df1$educFIT <- -5.652 + 0.990 * df1$age - 0.017 * df1$age2 + 0.530 * df1$smsa - 
+                0.425 * df1$south + 0.265 * df1$nearc + 0.190 * df1$daded + 0.235 * df1$momed
+
+summary(df1$educ)
+summary(df1$educFIT)
+  
+
+```
+
+
+
+```{r first stage Reg Exper, echo=TRUE}
+
+
+#Estimate the parameters of the model for log wage using two-stage least squares where you correct for the endogeneity of education and experience. Compare your result to the estimate in part (a).
+
+#Age and Age^2 regeress on Exper and Exper2
+
+
+df1$experFIT <- -0.348 + 0.010 * df1$age + 0.017 * df1$age2 - 0.530 * df1$smsa + 
+                 0.425 * df1$south - 0.265 * df1$nearc - 0.190 * df1$daded - 0.235 * df1$momed
+
+summary(df1$exper)
+summary(df1$experFIT)
+
+
+df1$exper2FIT <- 681.383 - 54.065 * df1$age + 1.280 * df1$age^2 - 11.803 * df1$smsa + 
+                  10.615 * df1$south - 5.780 * df1$nearc - 3.314 * df1$daded - 4.733 * df1$momed
+
+
+```
+
+
+(e) Two-stage least squares .{.tabset df1a-width=400}
+-----------------------------------------------------------------------
+
+
+```{r Two stage Reg Exper, echo=TRUE}
+
+attach(df1)
+
+final_exg_fit <- lm(formula = logw ~ educFIT + experFIT + exper2FIT + smsa + south, data = df1)
+summary(final_exg_fit)
+
+# Difference in both models, education has a bigger coef impact and experience decreases accordingly. This model seems more calibrated and partial endogeneity removed.
+
+
+```
+
+
+(e) Sargan test {.tabset df1a-width=400}
+-----------------------------------------------------------------------
+
+
+
+```{r Sargan Reg Exper, echo=TRUE}
+
+attach(final_exg_fit)
+
+df1$residual_ols <- fit_0$residuals
+
+df1$wage <- 4.4171884 + 0.0998308 * df1$educFIT + 0.0727341 * df1$educFIT + -0.0016340 * df1$exper2FIT + 
+                  0.1349183 * df1$smsa + -0.1589739 *  df1$south
+
+cor(df1$residual_ols,df1$wage)
+
+# Sargan test, no correlation between Exegenous effect 2SLS on residual of OLS
+
+```
