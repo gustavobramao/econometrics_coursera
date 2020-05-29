@@ -1,0 +1,295 @@
+---
+title: "Econometrics Test 6"
+output:
+html_document:
+toc: true
+toc_float: true
+---
+  
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(highcharter)
+library(dplyr)
+library(viridisLite)
+library(forecast)
+library(treemap)
+library(flexdashboard)
+library(forecast)
+library(readxl)
+library(lmtest)
+library(gap)
+library(ggplot2)
+library(corrplot)
+library(plm)
+library(AER)
+library(tseries)
+library(tidyverse)
+library(dynlm)
+library(DT)
+library(Metrics)
+```
+
+```{r cars, include=FALSE}
+df <- read_xlsx("~/desktop/test_6.xlsx")
+colnames(df) <- c("date", "trend", "CPI_EUR", "CPI_USA", "LOGPEUR" , "LOGPUSA" , "DPEUR" , "DPUSA")
+
+```
+
+
+(a) Make time series plots {.tabset df1a-width=400}
+-----------------------------------------------------------------------
+
+### CPI of the Euro area and the USA 
+
+```
+* Same trend across both series, the deviation between series increases over time.
+* Both series seems quite well correlated
+
+```
+
+
+  
+```{r All, echo=FALSE, warning=FALSE, error=FALSE}
+
+highchart(type = "stock") %>% 
+  hc_add_series(df, "line", hcaes(date, CPI_EUR), name = "CPI_EUR") %>% 
+  hc_add_series(df, "line", hcaes(date, CPI_USA), name = "CPI_USA")
+
+```
+
+### log(CPI)
+
+```
+* Log plot same as previous.
+* Same trend across both series, the deviation between series increases over time.
+* Both series seems quite well correlated
+* 2009 shows a significant deflation. (mainly in USA) 
+
+```
+
+
+```{r, echo=FALSE, warning=FALSE, error=FALSE}
+
+
+highchart(type = "stock") %>% 
+  hc_add_series(df, "line", hcaes(date, LOGPEUR), name = "LOGPEUR") %>% 
+  hc_add_series(df, "line", hcaes(date, LOGPUSA), name = "LOGPUSA")
+
+```
+
+
+### monthly inflation series DP
+
+```
+* We can see that both series are stationary when using difference in log over time constant variance.
+* 2009 shows a strong negative peak in USA that reflects the deflation observed in the previous plot.  
+
+```
+
+
+```{r, echo=FALSE, warning=FALSE, error=FALSE}
+
+#We can see that both series are stationary over time no trend in variance and constant over time.
+
+attach(df)
+
+par(mar = c(5, 4, 4, 4) + 0.3)              
+plot.ts(DPUSA, col = 2)              
+par(new = TRUE)                             
+plot.ts(DPEUR, col = 1,              
+     axes = FALSE, xlab = "", ylab = "")
+   mtext("DPEUR", side = 4, line = 3)
+   
+
+```
+
+(b) Perform the Augmented Dickey-Fuller (ADF) {.tabset df1a-width=400}
+-----------------------------------------------------------------------
+
+```{r, echo=TRUE, warning=FALSE, error=FALSE}
+
+#ADF test using determistic trend and lag of 3 days for LOGPEUR Reject H0
+
+adf.test(df$LOGPEUR, 'stationary', k = 3)
+```
+
+
+```{r, echo=TRUE, warning=FALSE, error=FALSE}
+
+#ADF test using determistic trend and lag of 3 days for LOGPUAS Reject H0
+
+adf.test(df$LOGPUSA, 'stationary', k = 3)
+
+```
+
+
+```
+tρ < -3.5
+ADF statistic is greater than -3.5 for both variables hence null hypotesis rejected and stationarity valid.
+```
+
+
+
+(c) AR model: DPEURt =α+β1DPEURt−6 +β2DPEURt−12 +εt | Estimate the parameters of this model {.tabset df1a-width=400}
+-----------------------------------------------------------------------
+
+
+```{r, echo=TRUE, warning=FALSE, error=FALSE}
+
+#filter sample jan 2000 till dec 2020
+
+df <- df[2:132,]
+
+#clean data prior ACF 
+df$DPEUR <- df$DPEUR %>% replace_na(0)
+df$DPEUR <- as.numeric(df$DPEUR)
+
+#model with ACF DPEUR 
+
+acf_dpeur <- acf(df$DPEUR)
+
+#Justify lag 6 and 12 as seen lag 7-1 yields a 0.40 and 13-1 a 0.55 max coef in the lag values.
+
+acf_dpeur$acf
+
+#model with PACF DPEUR
+pcf_dpeur <- acf(df$DPEUR, type = 'partial')
+
+
+# 7-1 and 13-1 yield respectively 0.37 and 0.398
+
+pcf_dpeur$acf
+
+# conclusion both model ACF and PACF shows that lag 6 and 12 plot the strongest cor value, but ACF outperforms PCF
+
+
+```
+
+```{r, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE}
+
+### DPEURt=α+β1DPEURt−6+β2DPEURt−12+ϵt . Estimate the parameters of this model (sample Jan 2000 - Dec 2010)
+
+
+df$DPEUR <- as.numeric(df$DPEUR)
+df <- df[1:132,]
+attach(df)
+ar.eur<- ar(DPEUR, order.max = 12, method = "ols",na.action=na.omit)
+
+print(ar.eur)
+
+### estimated parameters
+###DPEUR = 0 + β1.1818xDPEURLag[6] +  β2.1818xDPEURLag[0.5346] + ϵt
+
+```
+
+
+(d) Extend the AR model of part (c) by adding lagged values of monthly inflation USA {.tabset df1a-width=400}
+-----------------------------------------------------------------------
+
+```{r, echo=FALSE, warning=FALSE, error=FALSE, message=FALSE}
+
+df$DPEUR <- as.numeric(df$DPEUR)
+df$DPUSA <- as.numeric(df$DPUSA)
+
+df <- df[1:132,]
+
+attach(df)
+
+
+ar.eur <- ar(DPEUR, order.max = 12, method = "ols",na.action=na.omit)
+ar.usa <- ar(DPUSA, order.max = 12, method = "ols",na.action=na.omit)
+
+#time series object.
+
+dpEur <- ts(df$DPEUR, start =2)
+dpUsa <- ts(df$DPUSA, start =2)
+
+
+```
+
+
+```{r, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE}
+
+# ADL DPEUR with LAG USA added.
+fit_adl_dpeur <- dynlm(dpEur ~ L(dpEur, 6) + L(dpEur, 12) + L(dpUsa, 1) + L(dpUsa, 6) + L(dpUsa, 12))
+summary(fit_adl_dpeur)
+
+
+### USA lag 6 does not enter in the model coef not significant hence remodel without.
+
+fit_adl_dpeur_2 <- dynlm(dpEur ~ L(dpEur, 6) + L(dpEur, 12) + L(dpUsa, 1) + L(dpUsa, 12))
+summary(fit_adl_dpeur_2)
+
+```
+
+
+
+(e) Use the models of parts (c) and (d) to make two series of 12 monthly inflation forecasts for 2011 {.tabset df1a-width=400}
+-----------------------------------------------------------------------
+
+
+```{r, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE}
+
+### new data frame
+
+df_2 <- read_xlsx("~/desktop/test_6.xlsx")
+colnames(df_2) <- c("date", "trend", "CPI_EUR", "CPI_USA", "LOGPEUR" , "LOGPUSA" , "DPEUR" , "DPUSA")
+df_2$DPEUR <- as.numeric(df_2$DPEUR)
+
+### filter 2011 onwards
+
+df_2 <- df_2[133:144,]
+
+### forecast AR based on model c
+
+
+df_2$ar_eur <- ar.eur[["x.intercept"]]+ df_2$DPEUR*ar.eur$ar[6]+df_2$DPEUR*ar.eur$ar[12]
+
+### forecast ADL based on model D
+
+df_2$adl_eur <- df_2$DPEUR*fit_adl_dpeur_2$coefficients[1]+df_2$DPEUR*fit_adl_dpeur_2$coefficients[2]+df_2$DPEUR*fit_adl_dpeur_2$coefficients[3]+
+  df_2$DPEUR*fit_adl_dpeur_2$coefficients[4]
+
+### Plot real versus forecast - We can see just by the plot that ADL performs better than AR.
+
+highchart(type = "chart") %>% 
+  hc_add_series(df_2, "scatter", hcaes(date, DPEUR), name = "Real") %>% 
+  hc_add_series(df_2, "scatter", hcaes(date, ar_eur), name = "AR") %>% 
+  hc_add_series(df_2, "scatter", hcaes(date, adl_eur), name = "ADL")
+
+
+
+```
+
+
+```{r, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE}
+
+
+attach(df_2)
+
+
+### RMSE and MAE
+
+rmse_ar <- rmse(df_2$DPEUR, df_2$ar_eur)
+rmse_adl <- rmse(df_2$DPEUR, df_2$adl_eur)
+
+### MAE
+mae_ar <- mae(df_2$DPEUR, df_2$ar_eur)
+mae_adl <- mae(df_2$DPEUR, df_2$adl_eur)
+
+
+### sum of forecast errros.
+
+e_ar <- sum(DPEUR)-sum(ar_eur)
+e_adl <- sum(DPEUR)-sum(adl_eur)
+
+
+f_accuracy <- cbind(rmse_ar, rmse_adl, mae_ar, mae_adl, e_ar, e_adl)
+datatable(f_accuracy)
+
+### Conclusion: Autoregressive Distributed Lag with USA Lag 1 and 12 and Lag 6 and lag 12 EUR outperforms Auto ### Regressive model Lag 6 and Lag 12 EUR - Lower RMSE and Lower MAE as well as less errors in abs terms.
+
+```
+
+
