@@ -1,0 +1,116 @@
+---
+title: "Econometrics Test 3"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(highcharter)
+library(dplyr)
+library(viridisLite)
+library(forecast)
+library(treemap)
+library(flexdashboard)
+library(forecast)
+library(readxl)
+library(lmtest)
+library(gap)
+library(MASS)
+library(ggplot2)
+
+```
+
+```{r cars, include=FALSE}
+df3 <- read_xlsx("~/desktop/df_3.xlsx")
+```
+
+
+Interest rate on General to specific {.tabset data-width=400}
+-----------------------------------------------------------------------
+
+```{r All, echo=TRUE}
+
+# Comparing against all regressors.
+
+fit_0 <- lm(INTRATE ~ INFL + PROD + UNEMPL + COMMPRI + PCE
+            +PERSINC + HOUST, data=df3)
+
+summary(fit_0)
+
+AIC(fit_0)
+BIC(fit_0)
+resettest(fit_0, power = 2:3)
+```
+
+
+```{r General to specific, echo=TRUE}
+
+# Fit the full model 
+fit_0 <- lm(INTRATE ~ INFL + PROD + UNEMPL + COMMPRI + PCE
+            +PERSINC + HOUST, data=df3)
+
+# Stepwise regression model find the best model Iteratively adding and removing predictors
+step.model <- stepAIC(fit_0, direction = "both", 
+                      trace = FALSE)
+summary(step.model)
+
+AIC(step.model)
+BIC(step.model)
+resettest(step.model, power = 2:3)
+
+
+#model has same R2 but higher  F-statistic and also lower AIC and BIC. 
+#Therefore removing insignificant predictors increases accuracy.
+
+```
+
+RESET test {.tabset data-width=400}
+-----------------------------------------------------------------------
+
+```{r Reset Test, echo=TRUE}
+
+#filter dates
+df4 <- df3 %>% filter(OBS >= "1980")
+
+# Comparing against all regressors.
+
+fit_80 <- lm(INTRATE ~ INFL + PROD + UNEMPL + COMMPRI + PCE
+            +PERSINC + HOUST, data=df3)
+
+summary(fit_80)
+
+AIC(fit_80)
+BIC(fit_80)
+resettest(fit_80, power = 2:3)
+
+
+# Model after 1980 
+fit_80_s <- lm(INTRATE ~ INFL + PROD + UNEMPL + COMMPRI + PCE
+            +PERSINC + HOUST, data=df4)
+
+# Stepwise regression model find the best model Iteratively adding and removing predictors
+step.model_s <- stepAIC(fit_80_s, direction = "both", 
+                      trace = FALSE)
+summary(step.model_s)
+
+AIC(step.model)
+BIC(step.model)
+resettest(step.model, power = 2:3)
+
+# p value increased model not signigicant
+
+```
+
+Jarque-Bera and regression assumtions {.tabset data-width=400}
+-----------------------------------------------------------------------
+
+```{r validation Test, echo=TRUE}
+
+par(mfrow = c(2, 2))
+plot(step.model_s)
+
+```
