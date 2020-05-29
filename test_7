@@ -1,0 +1,408 @@
+---
+title: "Econometrics Test 7"
+output:
+html_document:
+toc: true
+toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(highcharter)
+library(dplyr)
+library(viridisLite)
+library(forecast)
+library(treemap)
+library(flexdashboard)
+library(arules)
+
+library(forecast)
+library(ggplot2)
+library(ggfortify)
+library(prophet)
+library(corrplot)
+library(knitr)
+
+library(bigrquery) 
+library(dplyr) 
+library(DBI)
+library(bigQueryR)
+
+library(corrplot)
+library(drc)
+library(sandwich)
+library(lmtest)
+
+## BiGQuery Setup
+library(googleAuthR)
+library(searchConsoleR)
+
+options(googleAuthR.scopes.selected = c("https://www.googleapis.com/auth/bigquery",
+                                        "https://www.googleapis.com/auth/analytics"))
+
+library(igraph)
+library(RGoogleAnalytics)
+library(scales)
+library(googleAnalyticsR)
+library(ChannelAttribution)
+library(viridisLite)
+library(rlang)
+library(shiny)
+
+library(knitr)
+library(kableExtra)
+library(plotly)
+
+library(doParallel)
+library(bsts)
+library(rstan)
+library(broom)
+library(rlang)
+library(DT)
+library(tidyverse)
+library(flexdashboard)
+library(readxl)
+library(lmtest)
+library(gap)
+library(corrplot)
+library(plm)
+library(AER)
+library(tseries)
+library(dynlm)
+library(DT)
+library(Metrics)
+library(tsoutliers)
+```
+
+```{r, include=FALSE}
+df <- read_xlsx("~/desktop/test7.xlsx")
+
+
+#start the lineal model
+source("~/desktop/models_contento/gus_funs.R")
+attach(df)
+
+lm_fit <- lm(sell ~lot + bdms + fb + sty + drv + rec + ffin + ghw + ca + gar + reg, 
+             data = df)
+
+summary(lm_fit)
+
+```
+
+
+(a) linear model{.tabset df1a-width=400}
+-----------------------------------------------------------------------
+
+```{r All, echo=TRUE, warning=FALSE, error=FALSE}
+
+summary(lm_fit)
+
+### All predictors significant and enter into the model except bdms p value 0.19
+
+
+par(mfrow = c(2, 2))
+autoplot(lm_fit)
+
+### Linear Regression assumtion.
+
+
+#1st Residual vs fitted Linear assumtion plot. Ideally, slope should be null, horizontal line blue lune should be approximately at zero. The presence of a pattern may indicate a problem with some aspect of the linear model as seen in the plot small pattern as we decrease/increase fitted values deviation increases.
+
+#2nd Plot QQ - The QQ plot of residuals can be used to visually check the normality assumption. The normal probability plot of residuals should approximately follow a straight line, in our case as we increase the units the error increases. Sign of a non linear relation as we increase the effect on the regressor.
+
+#3rd plot Scale location - This plot shows if residuals are spread equally along the ranges of predictors. It’s good if you see a horizontal line with equally spread points. This is not the case. It can be seen that the variability (variances) of the residual points increases with the value of the fitted outcome variable, suggesting non-constant variances in the residuals errors (or heteroscedasticity). Apling log transformation on y could reduce heteroscedasticity problem view plot question b.
+
+#4rd plot Outliers and high levarage points atr isolated from the regression using cook's distance method, horizontal line nearing the 0 is good sign of removing bad outliers.
+
+#### RESET TEST
+
+m1 <- resettest(lm_fit, power = 2, type = "fitted", 
+                          data = df)
+print(m1)
+
+
+```
+
+
+```
+* Rest test to be valid we should NOT reject the null hypotesis as seeb by fitting powers to fitted values the p value is ~0 hence rejecting the null hypotesis.
+* H0 Null hypotesis rejected p-value of ~0
+
+```
+
+```{r, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE}
+
+jarque.bera.test(lm_fit$residuals)
+
+```
+
+```
+*p-value of ~0, the Jarque-Bera test suggests that the linear model residuals are NOT normally distributed hence rejecting the null hypotesis.
+
+```
+
+(b) linear model with log in sales{.tabset df1a-width=400}
+-----------------------------------------------------------------------
+
+```{r, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE}
+
+df$log_sell <- log(sell)
+attach(df)
+
+lm_fit2 <- lm(log_sell ~lot + bdms + fb + sty + drv + rec + ffin + ghw + ca + gar + reg, 
+             data = df)
+
+summary(lm_fit2)
+
+```
+
+```{r, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE}
+
+par(mfrow = c(2, 2))
+autoplot(lm_fit2)
+
+### All predictors significants in this model with y = log sell
+
+### Linear Regression assumtion.
+
+#1st Residual vs fitted Linear assumtion plot. Ideally, slope should be null, horizontal line blue lune should be approximately at zero. The presence of a pattern may indicate a problem with some aspect of the linear model. this model shows no pattern in the residual vs fitted a good sign in the model robustness.
+
+#2nd Plot QQ - The QQ plot of residuals can be used to visually check the normality assumption. The normal probability plot of residuals should approximately follow a straight line, in this case the log transformation improved the normality assumtion as seen on this plot versus plot in question a
+
+# Apling log transformation on y removed heteroscedasticity as the line is now equally spread.
+
+## Aplying log transformation on sell did improve the model, [1] all regressors are now significant in the model and [2]linear assumtions are valid.
+
+#### RESET TEST
+
+
+m2 <- resettest(lm_fit2, power = 2, type = "fitted", 
+                data = df)
+
+print(m2)
+
+
+```
+
+```
+* Rest test to be valid we should NOT reject the null hypotesis as seeb by fitting powers to fitted values the p value is ~0.6033 hence we are NOT rejecting the null hypotesis.
+* H0 Null hypotesis NOT rejected p-value above 5% of significance.
+
+```
+
+```{r, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE}
+
+jarque.bera.test(lm_fit2$residuals)
+
+```
+
+```
+*p-value of ~0.0147, the Jarque-Bera test suggests that the linear model residuals are still NOT normally distributed but improved drastically verus model a.
+
+```
+(c) log lot model {.tabset df1a-width=400}
+-----------------------------------------------------------------------
+
+
+```{r, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE}
+
+df$log_lot <- log(lot)
+
+lm_fit3 <- lm(log_sell ~lot + log_lot + bdms + fb + sty + drv + rec + ffin + ghw + ca + gar + reg, 
+              data = df)
+
+summary(lm_fit3)
+
+##  in this model regression lot and it's logarithm lot is not significant but log lot is with a reduced coef at ~0.38
+
+```
+
+
+
+
+```{r, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE}
+
+df$log_lot <- log(lot)
+
+lm_fit3 <- lm(log_sell ~ lot + log_lot + bdms + fb + sty + drv + rec + ffin + ghw + ca + gar + reg, 
+              data = df)
+
+summary(lm_fit3)
+
+##  in this model regression lot and it's logarithm lot is not significant but log lot is with a reduced coef at ~0.38
+
+m3 <- resettest(lm_fit3, power = 2, type = "fitted", 
+                data = df)
+
+print(m3)
+
+
+jarque.bera.test(lm_fit3$residuals)
+
+```
+
+
+
+```{r, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE}
+
+### with lot removed and only regressing the log lot given lot was not significant in previous model, removing noise.
+
+
+lm_fit4 <- lm(log_sell ~ log_lot + bdms + fb + sty + drv + rec + ffin + ghw + ca + gar + reg, 
+              data = df)
+
+summary(lm_fit4)
+
+##  in this model regression lot and it's logarithm lot is not significant but log lot is with a reduced coef at ~0.38
+
+m4 <- resettest(lm_fit4, power = 2, type = "fitted", 
+                data = df)
+
+print(m4)
+
+
+jarque.bera.test(lm_fit4$residuals)
+
+
+```
+
+
+```
+*lm_fit4 <- lm(log_sell ~ log_lot + bdms + fb + sty + drv + rec + ffin + ghw + ca + gar + reg, 
+              data = df)
+              
+The model expressed above suggests that using the log  lot instead of lot or log lot + lot improves the RESET test and the jarque bera one, that said this model does still NOT reject the null hypotesis with a 5% significance on the jarque bera one.
+           
+```
+
+(d) log lot model with intereactions on all variables {.tabset df1a-width=400}
+-----------------------------------------------------------------------
+
+```{r, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE}
+### fit model with log(lot) regressed as interaction variable on all others regressors.  
+
+lm_fit5 <- lm(log_sell ~ log_lot + bdms + fb + sty + drv + rec + ffin + ghw + ca + gar + reg + 
+            log_lot * bdms + log_lot * fb + log_lot * sty + log_lot * drv + log_lot * rec + log_lot * ffin +
+            log_lot * ghw + log_lot * ca + log_lot * gar + log_lot * reg , data = df)
+
+summary(lm_fit5)
+
+
+### filter only interaction variable that are siginificant and enter into the log_lot * drv AND log_lot * rec + log_lot 
+
+## Fit new model. 
+
+
+lm_fit6 <- lm(log_sell ~ log_lot + bdms + fb + sty + drv + rec + ffin + ghw + ca + gar + reg + 
+                log_lot * drv + log_lot * rec, data = df)
+
+summary(lm_fit6)
+
+## In new model log_lot * rec is at the limit of significance at ~5.2%, usally should be not included in the new fitted model.
+
+```
+
+
+```
+lm_fit6 <- lm(log_sell ~ log_lot + bdms + fb + sty + drv + rec + ffin + ghw + ca + gar + reg + 
+                log_lot * drv + log_lot * rec, data = df)
+              
+The interpretation of the model above is that the lot size has interactions with other variables significantly, 
+for example when lot size is bigger with a driveway it increases sell price, however when bigger lot size with a recreational room it decreases sell prices.
+
+```
+
+(e) Perform an F-test for the joint significance of the interaction effects from question (d). {.tabset df1a-width=400}
+-----------------------------------------------------------------------
+
+```{r, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE}
+
+SSR_f <- sum(lm_fit6$residuals^2)
+SSR_r <- sum(lm_fit5$residuals^2)
+
+f <- (SSR_f-SSR_r)/10
+r <- SSR_f/(546-22)
+
+f_test <- f/r
+  
+SSR_p <- pf(f_test, 10, 546-22)  
+
+print(SSR_p)
+
+# F_test ~0.6 and does not reject the null hypotesis with ~18% above the 5% treshold significance.
+  
+```
+
+(f) Now perform modelusing the general-to-specific approach{.tabset df1a-width=400}
+-----------------------------------------------------------------------
+```{r, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE}
+
+### Removing log(xi) till finding this model.
+
+lm_fit7 <- lm(log_sell ~ log_lot + bdms + fb + sty + drv + rec + ffin + ghw + ca + gar + reg + 
+                  log_lot * rec, data = df)
+summary(lm_fit7)
+
+### final model with all regressors that enters in the model with p values =< 0.05
+```
+
+(g) Explanatory variables are endogenous{.tabset df1a-width=400}
+-----------------------------------------------------------------------
+
+```
+Air conditioning, in this case, will be endogenous hence biased effect on the sales price as a house with air-conditioned are likely to be new and better maintained. Given that x(condition of the house) is omitted in the model, air-conditioned is likely taking effect β of the exogenous variable "condition of the house", hence impact in this case from air-conditioned is OVER ESTIMATED.
+```
+
+(h) Predictive ability of the model.{.tabset df1a-width=400}
+-----------------------------------------------------------------------
+
+```{r, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE}
+
+### Fitting model as per instruction only with log on lot and all other regressors.
+
+df_learning <- df %>% filter(obs<401)
+
+lm_fit8 <- lm(log_sell ~ log_lot + bdms + fb + sty + drv + rec + ffin + ghw + ca + gar + reg, data = df_learning)
+summary(lm_fit8)
+
+
+### remove rec from the model not sigificant and re-fit
+
+
+lm_fit9 <- lm(log_sell ~ log_lot + bdms + fb + sty + drv + ffin + ghw + ca + gar + reg, data = df_learning)
+summary(lm_fit9)
+
+
+#### make predictions
+
+df_test <- df %>% filter(obs>400)
+
+df_test$sty <- as.numeric(df_test$sty)
+
+pred <- lm_fit9$coefficients[1]+lm_fit9$coefficients[2]*df_test$log_lot+lm_fit9$coefficients[3]*df_test$bdms+
+  lm_fit9$coefficients[4]*df_test$fb+lm_fit9$coefficients[5]*df_test$sty+lm_fit9$coefficients[6]*df_test$drv+
+  lm_fit9$coefficients[7]*df_test$ffin+lm_fit9$coefficients[8]*df_test$ghw+lm_fit9$coefficients[9]*df_test$ca+
+  +lm_fit9$coefficients[10]*df_test$gar+lm_fit9$coefficients[11]*df_test$reg
+
+df_test$pred <- pred
+
+#### Plot Preditcions
+
+
+highchart(type = "chart") %>% 
+  hc_add_series(df_test, "line", hcaes(obs, log_sell), name = "Real")%>%
+  hc_add_series(df_test, "line", hcaes(obs, pred), name = "pred")%>%
+hc_title(text = "Log Sales Prediction")
+
+
+#### MAE
+
+mae <- mae(df_test$log_sell, df_test$pred)
+print(mae)
+
+```
+
+```
+Conclusion: The model has significant predictability over sales prices with an MAE of ~0.13. We can see that model does not capture some outliers that are hard to predict in nature, other than that the line follows the same pattern.
+```
